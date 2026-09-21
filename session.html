@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>セッション選択 | NightReign TRPG</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 700px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+
+    h1 {
+      margin-bottom: 5px;
+    }
+
+    .user-info {
+      color: #666;
+      margin-bottom: 30px;
+    }
+
+    .change-user {
+      margin-left: 10px;
+      color: #555;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    .session-card {
+      width: 100%;
+      box-sizing: border-box;
+
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+
+      padding: 16px;
+      margin-bottom: 12px;
+
+      cursor: pointer;
+    }
+
+    .session-card:hover {
+      background: #eee;
+    }
+
+    .session-name {
+      font-size: 20px;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    .session-date {
+      color: #666;
+      margin-bottom: 8px;
+    }
+
+    .session-description {
+      white-space: pre-wrap;
+    }
+
+    .new-session {
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid #ccc;
+    }
+
+    input,
+    textarea {
+      display: block;
+      box-sizing: border-box;
+      width: 100%;
+
+      padding: 12px;
+      margin-bottom: 12px;
+
+      font-size: 16px;
+
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+
+    textarea {
+      min-height: 100px;
+      resize: vertical;
+    }
+
+    .create-button {
+      width: 100%;
+      padding: 14px;
+
+      font-size: 16px;
+      font-weight: bold;
+
+      border: none;
+      border-radius: 6px;
+
+      cursor: pointer;
+    }
+
+    .message {
+      margin-top: 10px;
+    }
+
+    .error {
+      color: red;
+    }
+  </style>
+</head>
+
+
+<body>
+
+  <h1>セッション選択</h1>
+
+  <div class="user-info">
+    <span id="userName"></span> で利用中
+
+    <span
+      class="change-user"
+      onclick="changeUser()"
+    >
+      ユーザー変更
+    </span>
+  </div>
+
+
+  <div id="sessions">
+    読み込み中...
+  </div>
+
+
+  <div class="new-session">
+
+    <h2>新規セッション作成</h2>
+
+    <input
+      type="text"
+      id="sessionName"
+      placeholder="セッション名"
+    >
+
+    <input
+      type="date"
+      id="sessionDate"
+    >
+
+    <textarea
+      id="sessionDescription"
+      placeholder="説明（任意）"
+    ></textarea>
+
+    <button
+      class="create-button"
+      onclick="createSession()"
+    >
+      セッションを作成
+    </button>
+
+    <div
+      id="createMessage"
+      class="message"
+    ></div>
+
+  </div>
+
+
+  <script>
+
+    // ==========================================
+    // Supabase設定
+    // ==========================================
+
+    const SUPABASE_URL =
+      "https://jxturqgabremmiyczrus.supabase.co";
+
+    const SUPABASE_KEY =
+      "sb_publishable_F7Yqj7rt8rhY1TdcppNi3w_kgYqA1gU";
+
+
+    const supabaseClient =
+      supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_KEY
+      );
+
+
+    // ==========================================
+    // 選択ユーザー確認
+    // ==========================================
+
+    const userId =
+      localStorage.getItem("user_id");
+
+    const userName =
+      localStorage.getItem("user_name");
+
+
+    // ユーザー未選択ならトップへ戻す
+    if (!userId) {
+
+      window.location.href =
+        "index.html";
+
+    } else {
+
+      document
+        .getElementById("userName")
+        .textContent =
+          userName ?? "";
+
+    }
+
+
+    // ==========================================
+    // セッション一覧取得
+    // ==========================================
+
+    async function loadSessions() {
+
+      const sessionsArea =
+        document.getElementById("sessions");
+
+
+      const {
+        data,
+        error
+      } =
+        await supabaseClient
+          .from("t_session")
+          .select("*")
+          .eq("delete_flg", false)
+          .order(
+            "session_ymd",
+            { ascending: false }
+          );
+
+
+      if (error) {
+
+        console.error(
+          "セッション取得エラー",
+          error
+        );
+
+        sessionsArea.innerHTML =
+          `<p class="error">
+            セッション情報の取得に失敗しました
+          </p>`;
+
+        return;
+      }
+
+
+      if (!data || data.length === 0) {
+
+        sessionsArea.innerHTML =
+          "<p>セッションがありません。</p>";
+
+        return;
+      }
+
+
+      let html = "";
+
+
+      data.forEach(session => {
+
+        let dateText = "";
+
+        if (session.session_ymd) {
+
+          const date =
+            new Date(session.session_ymd);
+
+          dateText =
+            date.toLocaleDateString("ja-JP");
+        }
+
+
+        html += `
+          <div
+            class="session-card"
+            onclick="selectSession(
+              ${session.id},
+              '${escapeForJs(session.session_name ?? "")}'
+            )"
+          >
+
+            <div class="session-name">
+              ${escapeHtml(
+                session.session_name ?? "名称未設定"
+              )}
+            </div>
+
+            <div class="session-date">
+              ${escapeHtml(dateText)}
+            </div>
+
+            <div class="session-description">
+              ${escapeHtml(
+                session.description ?? ""
+              )}
+            </div>
+
+          </div>
+        `;
+      });
+
+
+      sessionsArea.innerHTML =
+        html;
+    }
+
+
+    // ==========================================
+    // セッション選択
+    // ==========================================
+
+    function selectSession(
+      sessionId,
+      sessionName
+    ) {
+
+      localStorage.setItem(
+        "session_id",
+        sessionId
+      );
+
+      localStorage.setItem(
+        "session_name",
+        sessionName
+      );
+
+
+      window.location.href =
+        "characters.html";
+    }
+
+
+    // ==========================================
+    // セッション新規作成
+    // ==========================================
+
+    async function createSession() {
+
+      const name =
+        document
+          .getElementById("sessionName")
+          .value
+          .trim();
+
+      const date =
+        document
+          .getElementById("sessionDate")
+          .value;
+
+      const description =
+        document
+          .getElementById("sessionDescription")
+          .value
+          .trim();
+
+      const message =
+        document
+          .getElementById("createMessage");
+
+
+      if (!name) {
+
+        message.textContent =
+          "セッション名を入力してください";
+
+        message.className =
+          "message error";
+
+        return;
+      }
+
+
+      message.textContent =
+        "作成中...";
+
+      message.className =
+        "message";
+
+
+      const {
+        error
+      } =
+        await supabaseClient
+          .from("t_session")
+          .insert({
+            session_name: name,
+
+            session_ymd:
+              date || null,
+
+            description:
+              description || null,
+
+            delete_flg: false
+          });
+
+
+      if (error) {
+
+        console.error(
+          "セッション作成エラー",
+          error
+        );
+
+        message.textContent =
+          "セッションの作成に失敗しました";
+
+        message.className =
+          "message error";
+
+        return;
+      }
+
+
+      message.textContent =
+        "セッションを作成しました";
+
+
+      // 入力欄をクリア
+      document
+        .getElementById("sessionName")
+        .value = "";
+
+      document
+        .getElementById("sessionDate")
+        .value = "";
+
+      document
+        .getElementById("sessionDescription")
+        .value = "";
+
+
+      // 一覧を再取得
+      await loadSessions();
+    }
+
+
+    // ==========================================
+    // ユーザー変更
+    // ==========================================
+
+    function changeUser() {
+
+      localStorage.removeItem(
+        "user_id"
+      );
+
+      localStorage.removeItem(
+        "user_name"
+      );
+
+      localStorage.removeItem(
+        "is_admin"
+      );
+
+      localStorage.removeItem(
+        "session_id"
+      );
+
+      localStorage.removeItem(
+        "session_name"
+      );
+
+
+      window.location.href =
+        "index.html";
+    }
+
+
+    // ==========================================
+    // HTMLエスケープ
+    // ==========================================
+
+    function escapeHtml(text) {
+
+      const div =
+        document.createElement("div");
+
+      div.textContent =
+        text ?? "";
+
+      return div.innerHTML;
+    }
+
+
+    // ==========================================
+    // onclick文字列用
+    // ==========================================
+
+    function escapeForJs(text) {
+
+      return String(text ?? "")
+        .replace(/\\/g, "\\\\")
+        .replace(/'/g, "\\'");
+    }
+
+
+    // ==========================================
+    // 初期処理
+    // ==========================================
+
+    loadSessions();
+
+  </script>
+
+</body>
+
+</html>
