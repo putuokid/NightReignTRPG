@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>キャラクター作成 | NightReign TRPG</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+
+    body {
+      font-family: sans-serif;
+      max-width: 700px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+
+    h1 {
+      margin-bottom: 5px;
+    }
+
+    .session-name {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+
+    .user-info {
+      color: #666;
+      margin-bottom: 30px;
+    }
+
+    .back-link {
+      margin-left: 10px;
+      color: #555;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    .section {
+      margin-bottom: 30px;
+    }
+
+    label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    input,
+    select {
+      display: block;
+      box-sizing: border-box;
+      width: 100%;
+
+      padding: 12px;
+
+      font-size: 16px;
+
+      border: 1px solid #ccc;
+      border-radius: 6px;
+
+      background: white;
+    }
+
+    .template-info {
+      margin-top: 20px;
+
+      padding: 16px;
+
+      background: white;
+
+      border: 1px solid #ccc;
+      border-radius: 8px;
+    }
+
+    .template-name {
+      font-size: 22px;
+      font-weight: bold;
+
+      margin-bottom: 16px;
+    }
+
+    .status-title {
+      font-size: 18px;
+      font-weight: bold;
+
+      margin-top: 20px;
+      margin-bottom: 10px;
+    }
+
+    .status-grid {
+      display: grid;
+
+      grid-template-columns:
+        repeat(2, 1fr);
+
+      gap: 8px;
+    }
+
+    .status-item {
+      padding: 10px;
+
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+
+    .create-button {
+      width: 100%;
+
+      padding: 16px;
+
+      font-size: 18px;
+      font-weight: bold;
+
+      border: none;
+      border-radius: 8px;
+
+      cursor: pointer;
+    }
+
+    .create-button:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    .message {
+      margin-top: 15px;
+    }
+
+    .error {
+      color: red;
+    }
+
+  </style>
+</head>
+
+
+<body>
+
+  <h1>キャラクター作成</h1>
+
+
+  <div
+    id="sessionName"
+    class="session-name"
+  >
+  </div>
+
+
+  <div class="user-info">
+
+    <span id="userName"></span>
+    のキャラクターを作成
+
+    <span
+      class="back-link"
+      onclick="backToCharacters()"
+    >
+      キャラクター一覧へ戻る
+    </span>
+
+  </div>
+
+
+  <!-- ======================================
+       キャラクター名
+       ====================================== -->
+
+  <div class="section">
+
+    <label for="characterName">
+      キャラクター名
+    </label>
+
+    <input
+      type="text"
+      id="characterName"
+      placeholder="キャラクター名を入力"
+    >
+
+  </div>
+
+
+  <!-- ======================================
+       テンプレート選択
+       ====================================== -->
+
+  <div class="section">
+
+    <label for="templateSelect">
+      キャラクターテンプレート
+    </label>
+
+    <select
+      id="templateSelect"
+      onchange="showTemplate()"
+    >
+
+      <option value="">
+        テンプレートを選択してください
+      </option>
+
+    </select>
+
+
+    <div
+      id="templateInfo"
+      class="template-info"
+      style="display: none;"
+    >
+    </div>
+
+  </div>
+
+
+  <!-- ======================================
+       作成ボタン
+       ====================================== -->
+
+  <button
+    id="createButton"
+    class="create-button"
+    onclick="createCharacter()"
+  >
+    キャラクターを作成
+  </button>
+
+
+  <div
+    id="message"
+    class="message"
+  >
+  </div>
+
+
+  <script>
+
+    // ==========================================
+    // Supabase設定
+    // ==========================================
+
+    const SUPABASE_URL =
+      "https://jxturqgabremmiyczrus.supabase.co";
+
+    const SUPABASE_KEY =
+      "sb_publishable_F7Yqj7rt8rhY1TdcppNi3w_kgYqA1gU";
+
+
+    const supabaseClient =
+      supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_KEY
+      );
+
+
+    // ==========================================
+    // localStorage
+    // ==========================================
+
+    const userId =
+      localStorage.getItem("user_id");
+
+    const userName =
+      localStorage.getItem("user_name");
+
+    const sessionId =
+      localStorage.getItem("session_id");
+
+    const sessionName =
+      localStorage.getItem("session_name");
+
+
+    // ==========================================
+    // 必要情報チェック
+    // ==========================================
+
+    if (!userId) {
+
+      window.location.href =
+        "index.html";
+
+    } else if (!sessionId) {
+
+      window.location.href =
+        "session.html";
+
+    } else {
+
+      document
+        .getElementById("userName")
+        .textContent =
+          userName ?? "";
+
+      document
+        .getElementById("sessionName")
+        .textContent =
+          sessionName ?? "";
+
+    }
+
+
+    // ==========================================
+    // テンプレート保持用
+    // ==========================================
+
+    let templates = [];
+
+
+    // ==========================================
+    // テンプレート一覧取得
+    // ==========================================
+
+    async function loadTemplates() {
+
+      const {
+        data,
+        error
+      } =
+        await supabaseClient
+          .from("m_characters")
+          .select("*")
+          .eq("delete_flg", false)
+          .order("id");
+
+
+      if (error) {
+
+        console.error(
+          "テンプレート取得エラー",
+          error
+        );
+
+        showError(
+          "キャラクターテンプレートの取得に失敗しました"
+        );
+
+        return;
+      }
+
+
+      templates =
+        data ?? [];
+
+
+      const select =
+        document.getElementById(
+          "templateSelect"
+        );
+
+
+      templates.forEach(template => {
+
+        const option =
+          document.createElement(
+            "option"
+          );
+
+        option.value =
+          template.id;
+
+        option.textContent =
+          template.name;
+
+        select.appendChild(
+          option
+        );
+      });
+
+    }
+
+
+    // ==========================================
+    // 選択テンプレート表示
+    // ==========================================
+
+    function showTemplate() {
+
+      const templateId =
+        document
+          .getElementById(
+            "templateSelect"
+          )
+          .value;
+
+
+      const info =
+        document.getElementById(
+          "templateInfo"
+        );
+
+
+      if (!templateId) {
+
+        info.style.display =
+          "none";
+
+        info.innerHTML =
+          "";
+
+        return;
+      }
+
+
+      const template =
+        templates.find(
+          template =>
+            String(template.id) ===
+            String(templateId)
+        );
+
+
+      if (!template) {
+
+        info.style.display =
+          "none";
+
+        return;
+      }
+
+
+      info.style.display =
+        "block";
+
+
+      info.innerHTML = `
+
+        <div class="template-name">
+          ${escapeHtml(template.name)}
+        </div>
+
+
+        <div class="status-title">
+          基本情報
+        </div>
+
+
+        <div class="status-grid">
+
+          <div class="status-item">
+            HP：
+            ${template.hp ?? "-"}
+          </div>
+
+          <div class="status-item">
+            FP：
+            ${template.fp ?? "-"}
+          </div>
+
+          <div class="status-item">
+            加護：
+            ${template.bless ?? "-"}
+          </div>
+
+          <div class="status-item">
+            運試し：
+            ${template.luck ?? "-"}
+          </div>
+
+          <div class="status-item">
+            アクションダイス：
+            ${template.action_dice ?? "-"}
+          </div>
+
+          <div class="status-item">
+            ディフェンスダイス：
+            ${template.defence_dice ?? "-"}
+          </div>
+
+        </div>
+
+
+        <div class="status-title">
+          ステータス
+        </div>
+
+
+        <div class="status-grid">
+
+          <div class="status-item">
+            フィジカル：
+            ${template.physical ?? "-"}
+          </div>
+
+          <div class="status-item">
+            メンタル：
+            ${template.mental ?? "-"}
+          </div>
+
+          <div class="status-item">
+            筋力：
+            ${template.strength ?? "-"}
+          </div>
+
+          <div class="status-item">
+            技量：
+            ${template.agility ?? "-"}
+          </div>
+
+          <div class="status-item">
+            バランス：
+            ${template.balance ?? "-"}
+          </div>
+
+          <div class="status-item">
+            知力：
+            ${template.intelligence ?? "-"}
+          </div>
+
+          <div class="status-item">
+            信仰：
+            ${template.faith ?? "-"}
+          </div>
+
+          <div class="status-item">
+            神秘：
+            ${template.mystery ?? "-"}
+          </div>
+
+        </div>
+
+
+        <div class="status-title">
+          得意武器
+        </div>
+
+
+        <div class="status-grid">
+
+          <div class="status-item">
+            得意武器1：
+            ${template.main_weapone_1 ?? "-"}
+          </div>
+
+          <div class="status-item">
+            得意武器2：
+            ${template.main_weapone_2 ?? "-"}
+          </div>
+
+          <div class="status-item">
+            得意武器3：
+            ${template.main_weapone_3 ?? "-"}
+          </div>
+
+        </div>
+
+      `;
+
+    }
+
+
+    // ==========================================
+    // キャラクター作成
+    // ==========================================
+
+    async function createCharacter() {
+
+      const characterName =
+        document
+          .getElementById(
+            "characterName"
+          )
+          .value
+          .trim();
+
+
+      const templateId =
+        document
+          .getElementById(
+            "templateSelect"
+          )
+          .value;
+
+
+      const message =
+        document.getElementById(
+          "message"
+        );
+
+
+      // ------------------------------------------
+      // 入力チェック
+      // ------------------------------------------
+
+      if (!characterName) {
+
+        showError(
+          "キャラクター名を入力してください"
+        );
+
+        return;
+      }
+
+
+      if (!templateId) {
+
+        showError(
+          "キャラクターテンプレートを選択してください"
+        );
+
+        return;
+      }
+
+
+      const template =
+        templates.find(
+          template =>
+            String(template.id) ===
+            String(templateId)
+        );
+
+
+      if (!template) {
+
+        showError(
+          "テンプレート情報が見つかりません"
+        );
+
+        return;
+      }
+
+
+      // ------------------------------------------
+      // 二重クリック防止
+      // ------------------------------------------
+
+      const button =
+        document.getElementById(
+          "createButton"
+        );
+
+
+      button.disabled =
+        true;
+
+
+      message.textContent =
+        "作成中...";
+
+      message.className =
+        "message";
+
+
+      // ------------------------------------------
+      // t_characterへ登録
+      // ------------------------------------------
+
+      const {
+        data,
+        error
+      } =
+        await supabaseClient
+          .from("t_character")
+          .insert({
+
+            session_id:
+              Number(sessionId),
+
+            user_id:
+              Number(userId),
+
+            name:
+              characterName,
+
+            player_name:
+              userName,
+
+            action_dice:
+              template.action_dice,
+
+            defence_dice:
+              template.defence_dice,
+
+            hp:
+              template.hp,
+
+            fp:
+              template.fp,
+
+            bless:
+              template.bless,
+
+            luck:
+              template.luck,
+
+            physical:
+              template.physical,
+
+            mental:
+              template.mental,
+
+            strength:
+              template.strength,
+
+            agility:
+              template.agility,
+
+            balance:
+              template.balance,
+
+            intelligence:
+              template.intelligence,
+
+            faith:
+              template.faith,
+
+            mystery:
+              template.mystery,
+
+            delete_flg:
+              false
+
+          })
+          .select();
+
+
+      // ------------------------------------------
+      // エラー
+      // ------------------------------------------
+
+      if (error) {
+
+        console.error(
+          "キャラクター作成エラー",
+          error
+        );
+
+        showError(
+          "キャラクターの作成に失敗しました"
+        );
+
+        button.disabled =
+          false;
+
+        return;
+      }
+
+
+      // ------------------------------------------
+      // 成功
+      // ------------------------------------------
+
+      message.textContent =
+        "キャラクターを作成しました";
+
+
+      // 作成したキャラクターIDを保持
+      if (
+        data &&
+        data.length > 0
+      ) {
+
+        localStorage.setItem(
+          "character_id",
+          data[0].id
+        );
+      }
+
+
+      // キャラクター一覧へ戻る
+      window.location.href =
+        "characters.html";
+
+    }
+
+
+    // ==========================================
+    // エラー表示
+    // ==========================================
+
+    function showError(text) {
+
+      const message =
+        document.getElementById(
+          "message"
+        );
+
+      message.textContent =
+        text;
+
+      message.className =
+        "message error";
+
+    }
+
+
+    // ==========================================
+    // キャラクター一覧へ戻る
+    // ==========================================
+
+    function backToCharacters() {
+
+      window.location.href =
+        "characters.html";
+
+    }
+
+
+    // ==========================================
+    // HTMLエスケープ
+    // ==========================================
+
+    function escapeHtml(text) {
+
+      const div =
+        document.createElement("div");
+
+      div.textContent =
+        text ?? "";
+
+      return div.innerHTML;
+
+    }
+
+
+    // ==========================================
+    // 初期処理
+    // ==========================================
+
+    loadTemplates();
+
+  </script>
+
+</body>
+
+</html>
