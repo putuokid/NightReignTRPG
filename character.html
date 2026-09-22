@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>キャラクターシート | NightReign TRPG</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+
+    body {
+      font-family: sans-serif;
+      max-width: 750px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+
+    .top-area {
+      margin-bottom: 20px;
+    }
+
+    .back-link {
+      color: #555;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    .sheet {
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      padding: 20px;
+    }
+
+    .character-name {
+      font-size: 28px;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+
+    .player-name {
+      color: #666;
+      margin-bottom: 8px;
+    }
+
+    .my-character {
+      display: inline-block;
+
+      font-size: 12px;
+
+      padding: 3px 8px;
+
+      border: 1px solid #aaa;
+      border-radius: 4px;
+
+      margin-bottom: 10px;
+    }
+
+    h2 {
+      font-size: 20px;
+
+      margin-top: 30px;
+      margin-bottom: 12px;
+
+      padding-bottom: 6px;
+
+      border-bottom: 1px solid #ccc;
+    }
+
+    .status-grid {
+      display: grid;
+
+      grid-template-columns:
+        repeat(2, 1fr);
+
+      gap: 8px;
+    }
+
+    .status-item {
+      padding: 10px;
+
+      border: 1px solid #ddd;
+      border-radius: 6px;
+
+      background: #fafafa;
+    }
+
+    .list-item {
+      padding: 12px 0;
+
+      border-bottom: 1px solid #ddd;
+    }
+
+    .list-item:last-child {
+      border-bottom: none;
+    }
+
+    .item-name {
+      font-weight: bold;
+    }
+
+    .description {
+      color: #666;
+
+      font-size: 14px;
+
+      margin-top: 4px;
+
+      white-space: pre-wrap;
+    }
+
+    .empty {
+      color: #888;
+    }
+
+    .error {
+      color: red;
+    }
+
+    .loading {
+      color: #666;
+    }
+
+    .edit-area {
+      margin-top: 30px;
+    }
+
+    .edit-button {
+      width: 100%;
+
+      padding: 14px;
+
+      font-size: 16px;
+      font-weight: bold;
+
+      border: 1px solid #aaa;
+      border-radius: 6px;
+
+      background: #f8f8f8;
+
+      cursor: pointer;
+    }
+
+  </style>
+
+</head>
+
+
+<body>
+
+  <div class="top-area">
+
+    <span
+      class="back-link"
+      onclick="backToCharacters()"
+    >
+      ← キャラクター一覧へ戻る
+    </span>
+
+  </div>
+
+
+  <div
+    id="character"
+    class="loading"
+  >
+    読み込み中...
+  </div>
+
+
+  <script>
+
+    // ==========================================
+    // Supabase設定
+    // ==========================================
+
+    const SUPABASE_URL =
+      "https://jxturqgabremmiyczrus.supabase.co";
+
+    const SUPABASE_KEY =
+      "sb_publishable_F7Yqj7rt8rhY1TdcppNi3w_kgYqA1gU";
+
+
+    const supabaseClient =
+      supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_KEY
+      );
+
+
+    // ==========================================
+    // localStorage
+    // ==========================================
+
+    const userId =
+      localStorage.getItem("user_id");
+
+    const sessionId =
+      localStorage.getItem("session_id");
+
+    const characterId =
+      localStorage.getItem("character_id");
+
+
+    // ==========================================
+    // 必要情報チェック
+    // ==========================================
+
+    if (!userId) {
+
+      window.location.href =
+        "index.html";
+
+    } else if (!sessionId) {
+
+      window.location.href =
+        "session.html";
+
+    } else if (!characterId) {
+
+      window.location.href =
+        "characters.html";
+
+    }
+
+
+    // ==========================================
+    // キャラクターシート取得
+    // ==========================================
+
+    async function loadCharacter() {
+
+      const characterArea =
+        document.getElementById(
+          "character"
+        );
+
+
+      // ------------------------------------------
+      // キャラクター本体
+      // ------------------------------------------
+
+      const {
+        data: character,
+        error: characterError
+      } =
+        await supabaseClient
+          .from("t_character")
+          .select("*")
+          .eq("id", characterId)
+          .eq("session_id", sessionId)
+          .eq("delete_flg", false)
+          .maybeSingle();
+
+
+      if (characterError) {
+
+        console.error(
+          "キャラクター取得エラー",
+          characterError
+        );
+
+        characterArea.innerHTML =
+          `
+            <p class="error">
+              キャラクター情報の取得に失敗しました。
+            </p>
+          `;
+
+        return;
+      }
+
+
+      if (!character) {
+
+        characterArea.innerHTML =
+          `
+            <p class="error">
+              キャラクターが見つかりません。
+            </p>
+          `;
+
+        return;
+      }
+
+
+      // ------------------------------------------
+      // アイテム
+      // ------------------------------------------
+
+      const {
+        data: itemData,
+        error: itemError
+      } =
+        await supabaseClient
+          .from("t_item")
+          .select("*")
+          .eq(
+            "character_id",
+            character.id
+          )
+          .eq(
+            "delete_flg",
+            false
+          )
+          .maybeSingle();
+
+
+      if (itemError) {
+
+        console.error(
+          "アイテム取得エラー",
+          itemError
+        );
+
+      }
+
+
+      // ------------------------------------------
+      // 装備
+      // ------------------------------------------
+
+      const {
+        data: equipmentData,
+        error: equipmentError
+      } =
+        await supabaseClient
+          .from("t_equipment")
+          .select("*")
+          .eq(
+            "character_id",
+            character.id
+          )
+          .eq(
+            "delete_flg",
+            false
+          )
+          .maybeSingle();
+
+
+      if (equipmentError) {
+
+        console.error(
+          "装備取得エラー",
+          equipmentError
+        );
+
+      }
+
+
+      // ------------------------------------------
+      // スキル
+      // ------------------------------------------
+
+      const {
+        data: skillData,
+        error: skillError
+      } =
+        await supabaseClient
+          .from("character_skills")
+          .select("*")
+          .eq(
+            "character_id",
+            character.id
+          )
+          .eq(
+            "delete_flg",
+            false
+          )
+          .maybeSingle();
+
+
+      if (skillError) {
+
+        console.error(
+          "スキル取得エラー",
+          skillError
+        );
+
+      }
+
+
+      // ==========================================
+      // マスタ取得
+      // ==========================================
+
+      const [
+        itemResult,
+        equipmentResult,
+        skillResult
+      ] =
+        await Promise.all([
+
+          supabaseClient
+            .from("m_item")
+            .select("*")
+            .eq(
+              "delete_flg",
+              false
+            ),
+
+          supabaseClient
+            .from("m_equipment")
+            .select("*")
+            .eq(
+              "delete_flg",
+              false
+            ),
+
+          supabaseClient
+            .from("m_skill")
+            .select("*")
+            .eq(
+              "delete_flg",
+              false
+            )
+
+        ]);
+
+
+      if (itemResult.error) {
+
+        console.error(
+          "アイテムマスタ取得エラー",
+          itemResult.error
+        );
+
+      }
+
+
+      if (equipmentResult.error) {
+
+        console.error(
+          "装備マスタ取得エラー",
+          equipmentResult.error
+        );
+
+      }
+
+
+      if (skillResult.error) {
+
+        console.error(
+          "スキルマスタ取得エラー",
+          skillResult.error
+        );
+
+      }
+
+
+      const itemMaster =
+        itemResult.data ?? [];
+
+      const equipmentMaster =
+        equipmentResult.data ?? [];
+
+      const skillMaster =
+        skillResult.data ?? [];
+
+
+      // ==========================================
+      // 表示HTML作成
+      // ==========================================
+
+      const itemHtml =
+        createItemHtml(
+          itemData,
+          itemMaster
+        );
+
+
+      const equipmentHtml =
+        createEquipmentHtml(
+          equipmentData,
+          equipmentMaster
+        );
+
+
+      const skillHtml =
+        createSkillHtml(
+          skillData,
+          skillMaster
+        );
+
+
+      const isMyCharacter =
+        String(character.user_id) ===
+        String(userId);
+
+
+      // ==========================================
+      // キャラクターシート表示
+      // ==========================================
+
+      characterArea.className =
+        "sheet";
+
+
+      characterArea.innerHTML = `
+
+        <div class="character-name">
+
+          ${escapeHtml(
+            character.name
+          )}
+
+        </div>
+
+
+        <div class="player-name">
+
+          PL：
+          ${escapeHtml(
+            character.player_name ?? "-"
+          )}
+
+        </div>
+
+
+        ${
+          isMyCharacter
+            ? `
+              <div class="my-character">
+                自分のキャラクター
+              </div>
+            `
+            : ""
+        }
+
+
+        <!-- ==============================
+             基本情報
+             ============================== -->
+
+        <h2>基本情報</h2>
+
+
+        <div class="status-grid">
+
+          <div class="status-item">
+            HP：
+            ${character.hp ?? "-"}
+          </div>
+
+          <div class="status-item">
+            FP：
+            ${character.fp ?? "-"}
+          </div>
+
+          <div class="status-item">
+            加護：
+            ${character.bless ?? "-"}
+          </div>
+
+          <div class="status-item">
+            運試し：
+            ${character.luck ?? "-"}
+          </div>
+
+          <div class="status-item">
+            アクションダイス：
+            ${character.action_dice ?? "-"}
+          </div>
+
+          <div class="status-item">
+            ディフェンスダイス：
+            ${character.defence_dice ?? "-"}
+          </div>
+
+        </div>
+
+
+        <!-- ==============================
+             ステータス
+             ============================== -->
+
+        <h2>ステータス</h2>
+
+
+        <div class="status-grid">
+
+          <div class="status-item">
+            フィジカル：
+            ${character.physical ?? "-"}
+          </div>
+
+          <div class="status-item">
+            メンタル：
+            ${character.mental ?? "-"}
+          </div>
+
+          <div class="status-item">
+            筋力：
+            ${character.strength ?? "-"}
+          </div>
+
+          <div class="status-item">
+            技量：
+            ${character.agility ?? "-"}
+          </div>
+
+          <div class="status-item">
+            バランス：
+            ${character.balance ?? "-"}
+          </div>
+
+          <div class="status-item">
+            知力：
+            ${character.intelligence ?? "-"}
+          </div>
+
+          <div class="status-item">
+            信仰：
+            ${character.faith ?? "-"}
+          </div>
+
+          <div class="status-item">
+            神秘：
+            ${character.mystery ?? "-"}
+          </div>
+
+        </div>
+
+
+        <!-- ==============================
+             装備
+             ============================== -->
+
+        <h2>装備</h2>
+
+        ${equipmentHtml}
+
+
+        <!-- ==============================
+             所持アイテム
+             ============================== -->
+
+        <h2>所持アイテム</h2>
+
+        ${itemHtml}
+
+
+        <!-- ==============================
+             習得スキル
+             ============================== -->
+
+        <h2>習得スキル</h2>
+
+        ${skillHtml}
+
+
+        ${
+          isMyCharacter
+            ? `
+              <div class="edit-area">
+
+                <button
+                  class="edit-button"
+                  onclick="editCharacter()"
+                >
+                  キャラクターを編集
+                </button>
+
+              </div>
+            `
+            : ""
+        }
+
+      `;
+
+    }
+
+
+    // ==========================================
+    // アイテムHTML
+    // ==========================================
+
+    function createItemHtml(
+      itemData,
+      master
+    ) {
+
+      if (!itemData) {
+
+        return `
+          <p class="empty">
+            所持アイテムなし
+          </p>
+        `;
+
+      }
+
+
+      let html = "";
+
+
+      for (
+        let i = 1;
+        i <= 4;
+        i++
+      ) {
+
+        const itemId =
+          itemData[`item_${i}`];
+
+        const article =
+          itemData[
+            `item_${i}_article`
+          ];
+
+
+        if (!itemId) {
+          continue;
+        }
+
+
+        const item =
+          findMaster(
+            master,
+            itemId
+          );
+
+
+        if (!item) {
+          continue;
+        }
+
+
+        html += `
+
+          <div class="list-item">
+
+            <div class="item-name">
+
+              ${escapeHtml(item.name)}
+
+              ×
+              ${article ?? 1}
+
+            </div>
+
+            ${
+              item.description
+                ? `
+                  <div class="description">
+                    ${escapeHtml(
+                      item.description
+                    )}
+                  </div>
+                `
+                : ""
+            }
+
+          </div>
+
+        `;
+
+      }
+
+
+      if (html === "") {
+
+        return `
+          <p class="empty">
+            所持アイテムなし
+          </p>
+        `;
+
+      }
+
+
+      return html;
+
+    }
+
+
+    // ==========================================
+    // 装備HTML
+    // ==========================================
+
+    function createEquipmentHtml(
+      equipmentData,
+      master
+    ) {
+
+      if (!equipmentData) {
+
+        return `
+          <p class="empty">
+            装備なし
+          </p>
+        `;
+
+      }
+
+
+      let html = "";
+
+
+      for (
+        let i = 1;
+        i <= 6;
+        i++
+      ) {
+
+        const equipmentId =
+          equipmentData[
+            `equipment_${i}`
+          ];
+
+
+        if (!equipmentId) {
+          continue;
+        }
+
+
+        const equipment =
+          findMaster(
+            master,
+            equipmentId
+          );
+
+
+        if (!equipment) {
+          continue;
+        }
+
+
+        html += `
+
+          <div class="list-item">
+
+            <div class="item-name">
+
+              ${escapeHtml(
+                equipment.name
+              )}
+
+              ${
+                equipment.equipment_type
+                  ? `
+                    （${escapeHtml(
+                      equipment.equipment_type
+                    )}）
+                  `
+                  : ""
+              }
+
+            </div>
+
+
+            ${
+              equipment.description
+                ? `
+                  <div class="description">
+                    ${escapeHtml(
+                      equipment.description
+                    )}
+                  </div>
+                `
+                : ""
+            }
+
+          </div>
+
+        `;
+
+      }
+
+
+      if (equipmentData.two_handed) {
+
+        html += `
+
+          <div class="list-item">
+
+            <div class="item-name">
+              両手持ち
+            </div>
+
+          </div>
+
+        `;
+
+      }
+
+
+      if (html === "") {
+
+        return `
+          <p class="empty">
+            装備なし
+          </p>
+        `;
+
+      }
+
+
+      return html;
+
+    }
+
+
+    // ==========================================
+    // スキルHTML
+    // ==========================================
+
+    function createSkillHtml(
+      skillData,
+      master
+    ) {
+
+      if (!skillData) {
+
+        return `
+          <p class="empty">
+            習得スキルなし
+          </p>
+        `;
+
+      }
+
+
+      let html = "";
+
+
+      for (
+        let i = 1;
+        i <= 12;
+        i++
+      ) {
+
+        const skillId =
+          skillData[`skill_${i}`];
+
+
+        if (!skillId) {
+          continue;
+        }
+
+
+        const skill =
+          findMaster(
+            master,
+            skillId
+          );
+
+
+        if (!skill) {
+          continue;
+        }
+
+
+        html += `
+
+          <div class="list-item">
+
+            <div class="item-name">
+
+              ${escapeHtml(
+                skill.name
+              )}
+
+            </div>
+
+
+            ${
+              skill.description
+                ? `
+                  <div class="description">
+                    ${escapeHtml(
+                      skill.description
+                    )}
+                  </div>
+                `
+                : ""
+            }
+
+          </div>
+
+        `;
+
+      }
+
+
+      if (html === "") {
+
+        return `
+          <p class="empty">
+            習得スキルなし
+          </p>
+        `;
+
+      }
+
+
+      return html;
+
+    }
+
+
+    // ==========================================
+    // マスタ検索
+    // ==========================================
+
+    function findMaster(
+      master,
+      id
+    ) {
+
+      return master.find(
+        data =>
+          String(data.id) ===
+          String(id)
+      );
+
+    }
+
+
+    // ==========================================
+    // 編集画面
+    // ==========================================
+
+    function editCharacter() {
+
+      window.location.href =
+        "character-edit.html";
+
+    }
+
+
+    // ==========================================
+    // 一覧へ戻る
+    // ==========================================
+
+    function backToCharacters() {
+
+      localStorage.removeItem(
+        "character_id"
+      );
+
+
+      window.location.href =
+        "characters.html";
+
+    }
+
+
+    // ==========================================
+    // HTMLエスケープ
+    // ==========================================
+
+    function escapeHtml(text) {
+
+      const div =
+        document.createElement("div");
+
+      div.textContent =
+        text ?? "";
+
+      return div.innerHTML;
+
+    }
+
+
+    // ==========================================
+    // 初期処理
+    // ==========================================
+
+    loadCharacter();
+
+  </script>
+
+</body>
+
+</html>
