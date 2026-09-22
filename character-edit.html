@@ -1,0 +1,1508 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>キャラクター編集 | NightReign TRPG</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+
+    body {
+      font-family: sans-serif;
+      max-width: 750px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+
+    h1 {
+      margin-bottom: 5px;
+    }
+
+    h2 {
+      font-size: 20px;
+      margin-top: 35px;
+      margin-bottom: 15px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #ccc;
+    }
+
+    .top-area {
+      margin-bottom: 20px;
+    }
+
+    .back-link {
+      color: #555;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    .sheet {
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      padding: 20px;
+    }
+
+    .player-name {
+      color: #666;
+      margin-bottom: 25px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .form-item {
+      margin-bottom: 12px;
+    }
+
+    label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+
+    input,
+    select {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      background: white;
+    }
+
+    .item-row {
+      display: grid;
+      grid-template-columns: 1fr 90px;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .equipment-row,
+    .skill-row {
+      margin-bottom: 10px;
+    }
+
+    .checkbox-area {
+      margin-top: 15px;
+    }
+
+    .checkbox-area label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: normal;
+    }
+
+    .checkbox-area input {
+      width: auto;
+    }
+
+    .save-area {
+      margin-top: 40px;
+    }
+
+    .save-button {
+      width: 100%;
+      padding: 16px;
+      font-size: 18px;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .save-button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .message {
+      margin-top: 15px;
+    }
+
+    .error {
+      color: red;
+    }
+
+    .loading {
+      color: #666;
+    }
+
+    @media (max-width: 500px) {
+
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+
+    }
+
+  </style>
+</head>
+
+
+<body>
+
+  <div class="top-area">
+
+    <span
+      class="back-link"
+      onclick="backToCharacter()"
+    >
+      ← キャラクターシートへ戻る
+    </span>
+
+  </div>
+
+
+  <div
+    id="mainArea"
+    class="loading"
+  >
+    読み込み中...
+  </div>
+
+
+  <script>
+
+    // ==========================================
+    // Supabase設定
+    // ==========================================
+
+    const SUPABASE_URL =
+      "https://jxturqgabremmiyczrus.supabase.co";
+
+    const SUPABASE_KEY =
+      "sb_publishable_F7Yqj7rt8rhY1TdcppNi3w_kgYqA1gU";
+
+
+    const supabaseClient =
+      supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_KEY
+      );
+
+
+    // ==========================================
+    // localStorage
+    // ==========================================
+
+    const userId =
+      localStorage.getItem("user_id");
+
+    const characterId =
+      localStorage.getItem("character_id");
+
+    const sessionId =
+      localStorage.getItem("session_id");
+
+
+    if (!userId) {
+
+      window.location.href =
+        "index.html";
+
+    } else if (!sessionId) {
+
+      window.location.href =
+        "session.html";
+
+    } else if (!characterId) {
+
+      window.location.href =
+        "characters.html";
+
+    }
+
+
+    // ==========================================
+    // データ保持用
+    // ==========================================
+
+    let character = null;
+
+    let itemData = null;
+    let equipmentData = null;
+    let skillData = null;
+
+    let itemMaster = [];
+    let equipmentMaster = [];
+    let skillMaster = [];
+
+
+    // ==========================================
+    // 初期読込
+    // ==========================================
+
+    async function loadData() {
+
+      const mainArea =
+        document.getElementById(
+          "mainArea"
+        );
+
+
+      // ------------------------------------------
+      // キャラクター取得
+      // ------------------------------------------
+
+      const characterResult =
+        await supabaseClient
+          .from("t_character")
+          .select("*")
+          .eq("id", characterId)
+          .eq("session_id", sessionId)
+          .eq("delete_flg", false)
+          .maybeSingle();
+
+
+      if (characterResult.error) {
+
+        console.error(
+          characterResult.error
+        );
+
+        showLoadError(
+          "キャラクター情報の取得に失敗しました。"
+        );
+
+        return;
+      }
+
+
+      character =
+        characterResult.data;
+
+
+      if (!character) {
+
+        showLoadError(
+          "キャラクターが見つかりません。"
+        );
+
+        return;
+      }
+
+
+      // ------------------------------------------
+      // 自分のキャラクターかチェック
+      // ------------------------------------------
+
+      if (
+        String(character.user_id) !==
+        String(userId)
+      ) {
+
+        showLoadError(
+          "このキャラクターは編集できません。"
+        );
+
+        return;
+      }
+
+
+      // ------------------------------------------
+      // その他データを並列取得
+      // ------------------------------------------
+
+      const [
+        itemResult,
+        equipmentResult,
+        skillResult,
+        itemMasterResult,
+        equipmentMasterResult,
+        skillMasterResult
+      ] =
+        await Promise.all([
+
+          supabaseClient
+            .from("t_item")
+            .select("*")
+            .eq(
+              "character_id",
+              characterId
+            )
+            .eq(
+              "delete_flg",
+              false
+            )
+            .maybeSingle(),
+
+          supabaseClient
+            .from("t_equipment")
+            .select("*")
+            .eq(
+              "character_id",
+              characterId
+            )
+            .eq(
+              "delete_flg",
+              false
+            )
+            .maybeSingle(),
+
+          supabaseClient
+            .from("t_skills")
+            .select("*")
+            .eq(
+              "character_id",
+              characterId
+            )
+            .eq(
+              "delete_flg",
+              false
+            )
+            .maybeSingle(),
+
+          supabaseClient
+            .from("m_item")
+            .select("*")
+            .eq(
+              "delete_flg",
+              false
+            )
+            .order("id"),
+
+          supabaseClient
+            .from("m_equipment")
+            .select("*")
+            .eq(
+              "delete_flg",
+              false
+            )
+            .order("id"),
+
+          supabaseClient
+            .from("m_skill")
+            .select("*")
+            .eq(
+              "delete_flg",
+              false
+            )
+            .order("id")
+
+        ]);
+
+
+      if (itemResult.error) {
+        console.error(itemResult.error);
+      }
+
+      if (equipmentResult.error) {
+        console.error(equipmentResult.error);
+      }
+
+      if (skillResult.error) {
+        console.error(skillResult.error);
+      }
+
+      if (itemMasterResult.error) {
+        console.error(itemMasterResult.error);
+      }
+
+      if (equipmentMasterResult.error) {
+        console.error(equipmentMasterResult.error);
+      }
+
+      if (skillMasterResult.error) {
+        console.error(skillMasterResult.error);
+      }
+
+
+      itemData =
+        itemResult.data;
+
+      equipmentData =
+        equipmentResult.data;
+
+      skillData =
+        skillResult.data;
+
+      itemMaster =
+        itemMasterResult.data ?? [];
+
+      equipmentMaster =
+        equipmentMasterResult.data ?? [];
+
+      skillMaster =
+        skillMasterResult.data ?? [];
+
+
+      renderForm();
+
+    }
+
+
+    // ==========================================
+    // 編集画面描画
+    // ==========================================
+
+    function renderForm() {
+
+      const mainArea =
+        document.getElementById(
+          "mainArea"
+        );
+
+
+      mainArea.className =
+        "sheet";
+
+
+      mainArea.innerHTML = `
+
+        <h1>
+          ${escapeHtml(character.name)}
+        </h1>
+
+        <div class="player-name">
+          PL：
+          ${escapeHtml(
+            character.player_name ?? "-"
+          )}
+        </div>
+
+
+        <!-- ==============================
+             基本情報
+             ============================== -->
+
+        <h2>基本情報</h2>
+
+
+        <div class="form-item">
+
+          <label>
+            キャラクター名
+          </label>
+
+          <input
+            id="name"
+            type="text"
+            value="${escapeAttribute(
+              character.name ?? ""
+            )}"
+          >
+
+        </div>
+
+
+        <div class="form-grid">
+
+          ${numberInput(
+            "hp",
+            "HP",
+            character.hp
+          )}
+
+          ${numberInput(
+            "fp",
+            "FP",
+            character.fp
+          )}
+
+          ${numberInput(
+            "bless",
+            "加護",
+            character.bless
+          )}
+
+          ${numberInput(
+            "luck",
+            "運試し",
+            character.luck
+          )}
+
+          ${numberInput(
+            "action_dice",
+            "アクションダイス",
+            character.action_dice
+          )}
+
+          ${numberInput(
+            "defence_dice",
+            "ディフェンスダイス",
+            character.defence_dice
+          )}
+
+        </div>
+
+
+        <!-- ==============================
+             ステータス
+             ============================== -->
+
+        <h2>ステータス</h2>
+
+
+        <div class="form-grid">
+
+          ${numberInput(
+            "physical",
+            "フィジカル",
+            character.physical
+          )}
+
+          ${numberInput(
+            "mental",
+            "メンタル",
+            character.mental
+          )}
+
+          ${numberInput(
+            "strength",
+            "筋力",
+            character.strength
+          )}
+
+          ${numberInput(
+            "agility",
+            "技量",
+            character.agility
+          )}
+
+          ${numberInput(
+            "balance",
+            "バランス",
+            character.balance
+          )}
+
+          ${numberInput(
+            "intelligence",
+            "知力",
+            character.intelligence
+          )}
+
+          ${numberInput(
+            "faith",
+            "信仰",
+            character.faith
+          )}
+
+          ${numberInput(
+            "mystery",
+            "神秘",
+            character.mystery
+          )}
+
+        </div>
+
+
+        <!-- ==============================
+             装備
+             ============================== -->
+
+        <h2>装備</h2>
+
+        ${createEquipmentForm()}
+
+
+        <div class="checkbox-area">
+
+          <label>
+
+            <input
+              type="checkbox"
+              id="two_handed"
+              ${
+                equipmentData?.two_handed
+                  ? "checked"
+                  : ""
+              }
+            >
+
+            両手持ち
+
+          </label>
+
+        </div>
+
+
+        <!-- ==============================
+             アイテム
+             ============================== -->
+
+        <h2>所持アイテム</h2>
+
+        ${createItemForm()}
+
+
+        <!-- ==============================
+             スキル
+             ============================== -->
+
+        <h2>習得スキル</h2>
+
+        ${createSkillForm()}
+
+
+        <!-- ==============================
+             保存
+             ============================== -->
+
+        <div class="save-area">
+
+          <button
+            id="saveButton"
+            class="save-button"
+            onclick="saveCharacter()"
+          >
+            保存
+          </button>
+
+          <div
+            id="message"
+            class="message"
+          >
+          </div>
+
+        </div>
+
+      `;
+
+    }
+
+
+    // ==========================================
+    // 数値入力
+    // ==========================================
+
+    function numberInput(
+      id,
+      label,
+      value
+    ) {
+
+      return `
+
+        <div class="form-item">
+
+          <label for="${id}">
+            ${label}
+          </label>
+
+          <input
+            id="${id}"
+            type="number"
+            value="${
+              value ?? ""
+            }"
+          >
+
+        </div>
+
+      `;
+
+    }
+
+
+    // ==========================================
+    // 装備フォーム
+    // ==========================================
+
+    function createEquipmentForm() {
+
+      let html = "";
+
+
+      for (
+        let i = 1;
+        i <= 6;
+        i++
+      ) {
+
+        const selectedId =
+          equipmentData?.[
+            `equipment_${i}`
+          ];
+
+
+        html += `
+
+          <div class="equipment-row">
+
+            <label>
+              装備${i}
+            </label>
+
+            <select
+              id="equipment_${i}"
+            >
+
+              ${createOptions(
+                equipmentMaster,
+                selectedId,
+                "装備なし"
+              )}
+
+            </select>
+
+          </div>
+
+        `;
+
+      }
+
+
+      return html;
+
+    }
+
+
+    // ==========================================
+    // アイテムフォーム
+    // ==========================================
+
+    function createItemForm() {
+
+      let html = "";
+
+
+      for (
+        let i = 1;
+        i <= 4;
+        i++
+      ) {
+
+        const selectedId =
+          itemData?.[
+            `item_${i}`
+          ];
+
+
+        const article =
+          itemData?.[
+            `item_${i}_article`
+          ];
+
+
+        html += `
+
+          <div class="item-row">
+
+            <div>
+
+              <label>
+                アイテム${i}
+              </label>
+
+              <select
+                id="item_${i}"
+              >
+
+                ${createOptions(
+                  itemMaster,
+                  selectedId,
+                  "アイテムなし"
+                )}
+
+              </select>
+
+            </div>
+
+
+            <div>
+
+              <label>
+                個数
+              </label>
+
+              <input
+                id="item_${i}_article"
+                type="number"
+                min="0"
+                value="${
+                  article ?? ""
+                }"
+              >
+
+            </div>
+
+          </div>
+
+        `;
+
+      }
+
+
+      return html;
+
+    }
+
+
+    // ==========================================
+    // スキルフォーム
+    // ==========================================
+
+    function createSkillForm() {
+
+      let html = "";
+
+
+      for (
+        let i = 1;
+        i <= 12;
+        i++
+      ) {
+
+        const selectedId =
+          skillData?.[
+            `skill_${i}`
+          ];
+
+
+        html += `
+
+          <div class="skill-row">
+
+            <label>
+              スキル${i}
+            </label>
+
+            <select
+              id="skill_${i}"
+            >
+
+              ${createOptions(
+                skillMaster,
+                selectedId,
+                "スキルなし"
+              )}
+
+            </select>
+
+          </div>
+
+        `;
+
+      }
+
+
+      return html;
+
+    }
+
+
+    // ==========================================
+    // SELECTのoption生成
+    // ==========================================
+
+    function createOptions(
+      master,
+      selectedId,
+      emptyText
+    ) {
+
+      let html =
+        `<option value="">${emptyText}</option>`;
+
+
+      master.forEach(data => {
+
+        const selected =
+          String(data.id) ===
+          String(selectedId)
+            ? "selected"
+            : "";
+
+
+        html += `
+
+          <option
+            value="${data.id}"
+            ${selected}
+          >
+            ${escapeHtml(data.name)}
+          </option>
+
+        `;
+
+      });
+
+
+      return html;
+
+    }
+
+
+    // ==========================================
+    // 保存処理
+    // ==========================================
+
+    async function saveCharacter() {
+
+      const button =
+        document.getElementById(
+          "saveButton"
+        );
+
+
+      const message =
+        document.getElementById(
+          "message"
+        );
+
+
+      const name =
+        document
+          .getElementById("name")
+          .value
+          .trim();
+
+
+      if (!name) {
+
+        showSaveError(
+          "キャラクター名を入力してください。"
+        );
+
+        return;
+
+      }
+
+
+      button.disabled =
+        true;
+
+
+      message.textContent =
+        "保存中...";
+
+      message.className =
+        "message";
+
+
+      try {
+
+        // ========================================
+        // 念のため所有者を再確認
+        // ========================================
+
+        const ownerCheck =
+          await supabaseClient
+            .from("t_character")
+            .select("user_id")
+            .eq("id", characterId)
+            .maybeSingle();
+
+
+        if (ownerCheck.error) {
+          throw ownerCheck.error;
+        }
+
+
+        if (
+          !ownerCheck.data ||
+          String(
+            ownerCheck.data.user_id
+          ) !==
+          String(userId)
+        ) {
+
+          throw new Error(
+            "このキャラクターは編集できません。"
+          );
+
+        }
+
+
+        // ========================================
+        // キャラクター本体
+        // ========================================
+
+        const characterUpdate = {
+
+          name:
+            name,
+
+          hp:
+            getNumber("hp"),
+
+          fp:
+            getNumber("fp"),
+
+          bless:
+            getNumber("bless"),
+
+          luck:
+            getNumber("luck"),
+
+          action_dice:
+            getNumber(
+              "action_dice"
+            ),
+
+          defence_dice:
+            getNumber(
+              "defence_dice"
+            ),
+
+          physical:
+            getNumber("physical"),
+
+          mental:
+            getNumber("mental"),
+
+          strength:
+            getNumber("strength"),
+
+          agility:
+            getNumber("agility"),
+
+          balance:
+            getNumber("balance"),
+
+          intelligence:
+            getNumber(
+              "intelligence"
+            ),
+
+          faith:
+            getNumber("faith"),
+
+          mystery:
+            getNumber("mystery"),
+
+          updated_time:
+            new Date().toISOString()
+
+        };
+
+
+        const characterResult =
+          await supabaseClient
+            .from("t_character")
+            .update(
+              characterUpdate
+            )
+            .eq("id", characterId);
+
+
+        if (characterResult.error) {
+          throw characterResult.error;
+        }
+
+
+        // ========================================
+        // アイテム
+        // ========================================
+
+        const itemValues = {
+
+          character_id:
+            Number(characterId),
+
+          item_1:
+            getSelectNumber(
+              "item_1"
+            ),
+
+          item_1_article:
+            getNumber(
+              "item_1_article"
+            ),
+
+          item_2:
+            getSelectNumber(
+              "item_2"
+            ),
+
+          item_2_article:
+            getNumber(
+              "item_2_article"
+            ),
+
+          item_3:
+            getSelectNumber(
+              "item_3"
+            ),
+
+          item_3_article:
+            getNumber(
+              "item_3_article"
+            ),
+
+          item_4:
+            getSelectNumber(
+              "item_4"
+            ),
+
+          item_4_article:
+            getNumber(
+              "item_4_article"
+            ),
+
+          delete_flg:
+            false,
+
+          updated_time:
+            new Date().toISOString()
+
+        };
+
+
+        await saveSubTable(
+          "t_item",
+          itemData,
+          itemValues
+        );
+
+
+        // ========================================
+        // 装備
+        // ========================================
+
+        const equipmentValues = {
+
+          character_id:
+            Number(characterId),
+
+          equipment_1:
+            getSelectNumber(
+              "equipment_1"
+            ),
+
+          equipment_2:
+            getSelectNumber(
+              "equipment_2"
+            ),
+
+          equipment_3:
+            getSelectNumber(
+              "equipment_3"
+            ),
+
+          equipment_4:
+            getSelectNumber(
+              "equipment_4"
+            ),
+
+          equipment_5:
+            getSelectNumber(
+              "equipment_5"
+            ),
+
+          equipment_6:
+            getSelectNumber(
+              "equipment_6"
+            ),
+
+          two_handed:
+            document
+              .getElementById(
+                "two_handed"
+              )
+              .checked,
+
+          delete_flg:
+            false,
+
+          updated_time:
+            new Date().toISOString()
+
+        };
+
+
+        await saveSubTable(
+          "t_equipment",
+          equipmentData,
+          equipmentValues
+        );
+
+
+        // ========================================
+        // スキル
+        // ========================================
+
+        const skillValues = {
+
+          character_id:
+            Number(characterId),
+
+          delete_flg:
+            false,
+
+          updated_time:
+            new Date().toISOString()
+
+        };
+
+
+        for (
+          let i = 1;
+          i <= 12;
+          i++
+        ) {
+
+          skillValues[
+            `skill_${i}`
+          ] =
+            getSelectNumber(
+              `skill_${i}`
+            );
+
+        }
+
+
+        await saveSubTable(
+          "t_skills",
+          skillData,
+          skillValues
+        );
+
+
+        // ========================================
+        // 完了
+        // ========================================
+
+        message.textContent =
+          "保存しました。";
+
+
+        window.location.href =
+          "character.html";
+
+
+      } catch (error) {
+
+        console.error(
+          "保存エラー",
+          error
+        );
+
+
+        showSaveError(
+          error.message ??
+          "保存に失敗しました。"
+        );
+
+
+        button.disabled =
+          false;
+
+      }
+
+    }
+
+
+    // ==========================================
+    // 子テーブル保存
+    //
+    // データあり → UPDATE
+    // データなし → INSERT
+    // ==========================================
+
+    async function saveSubTable(
+      tableName,
+      currentData,
+      values
+    ) {
+
+      let result;
+
+
+      if (currentData) {
+
+        result =
+          await supabaseClient
+            .from(tableName)
+            .update(values)
+            .eq(
+              "id",
+              currentData.id
+            );
+
+      } else {
+
+        result =
+          await supabaseClient
+            .from(tableName)
+            .insert(values);
+
+      }
+
+
+      if (result.error) {
+
+        throw result.error;
+
+      }
+
+    }
+
+
+    // ==========================================
+    // 数値取得
+    // ==========================================
+
+    function getNumber(id) {
+
+      const value =
+        document
+          .getElementById(id)
+          .value;
+
+
+      if (
+        value === "" ||
+        value === null
+      ) {
+
+        return null;
+
+      }
+
+
+      return Number(value);
+
+    }
+
+
+    // ==========================================
+    // SELECT数値取得
+    // ==========================================
+
+    function getSelectNumber(id) {
+
+      const value =
+        document
+          .getElementById(id)
+          .value;
+
+
+      if (!value) {
+        return null;
+      }
+
+
+      return Number(value);
+
+    }
+
+
+    // ==========================================
+    // 保存エラー
+    // ==========================================
+
+    function showSaveError(text) {
+
+      const message =
+        document.getElementById(
+          "message"
+        );
+
+
+      message.textContent =
+        text;
+
+      message.className =
+        "message error";
+
+    }
+
+
+    // ==========================================
+    // 読込エラー
+    // ==========================================
+
+    function showLoadError(text) {
+
+      const mainArea =
+        document.getElementById(
+          "mainArea"
+        );
+
+
+      mainArea.className =
+        "error";
+
+      mainArea.textContent =
+        text;
+
+    }
+
+
+    // ==========================================
+    // キャラクターシートへ戻る
+    // ==========================================
+
+    function backToCharacter() {
+
+      window.location.href =
+        "character.html";
+
+    }
+
+
+    // ==========================================
+    // HTMLエスケープ
+    // ==========================================
+
+    function escapeHtml(text) {
+
+      const div =
+        document.createElement(
+          "div"
+        );
+
+      div.textContent =
+        text ?? "";
+
+      return div.innerHTML;
+
+    }
+
+
+    // ==========================================
+    // 属性用エスケープ
+    // ==========================================
+
+    function escapeAttribute(text) {
+
+      return String(
+        text ?? ""
+      )
+        .replaceAll(
+          "&",
+          "&amp;"
+        )
+        .replaceAll(
+          '"',
+          "&quot;"
+        )
+        .replaceAll(
+          "<",
+          "&lt;"
+        )
+        .replaceAll(
+          ">",
+          "&gt;"
+        );
+
+    }
+
+
+    // ==========================================
+    // 初期処理
+    // ==========================================
+
+    loadData();
+
+  </script>
+
+</body>
+
+</html>
